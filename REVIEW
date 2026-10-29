@@ -1,0 +1,136 @@
+HASIL REVIEW 
+
+1. Potensial adalah penembapatan credential pada 3rd party yang lebih aman dibandingkan pada .ENV, karena masih ada kemungkinan untuk terbaca saat terjadi peretaasan (jika terjadi), penggunaan secret manager seperti pada Vercel, Docker secrect, Heroku, Dan beberapa post tertentu
+yang dapat menyinmpan credential tanpa mudah dibaca.
+2. improvisasi pada structure table, tidak ada constain pada hubungan table cases ke user, hal ini berefek pada penghapusan data dikemudian hari
+3. Improvisasi pada kolom password, terexpose sebagai string yang sangat terlihat, tidak ada encrypsi
+4. improve updated_at dengan timestamp atau integer untuk better short kedepan
+5. improvisasi pada query insert, struktur pada database tidak nullable, terutama pada cases yang ingin dicreate (missing nullable pada created_at)
+6. perenderan data untuk HTML lebih baik ke user name daripada ke user_id, tidak menjadikan informasi baik untuk diterima, dimungkinkan untuk query Join untuk ini
+7. ada optimasi pada create cases, dimana terjadi pengambilan data dengan query yang seharusnya bisa di optimalkan karena data input juga sudah lengkap payloadnya, sehingga better untuk minimize proses query ke DB untuk return
+8. ada security risk besar saat PUT data menggunakan request body dengan mapping karena expose dari field akan terlihat dan exactly sama dengan nama pada fields di table. ada potensial breaking saat insert data juga saat payload berisi data yang tidak tersedia pada fields
+dibutuhkan verifikasi sesuai fields untuk mengamankan hal ini, dan effisien untuk development dikemudian hari
+9. PATCHING data kurang efisien, perubahan pada satu data tidak perlu mengambil data juga dari database after patching, ada kesalahan check untuk path URL mChase2 sedangkan mCase[1] yang digunakan
+10. delete data untuk existing data tidak dilakukan, tidak ada kepastian return deletion yang dilakukan (return akan sama apapun hasilnya)
+
+
+PERBAIKAN YANG MUNGKIN BISA DILAKUKAN:
+1. Credential bisa diperkuat dengan secret key manager
+2. yang paling beresiko dalam system:
+    - Password koneksi pada .ENV (ketika jebol pertama mudah terbaca)
+    - Password users tanpa enkripsi field
+    - Insert data cases dengan set payload yang fleksible tetapi potensi kegagalan
+    - Penghapusan data yang berpotensi untuk kehilangan constrain terhadap data induk seperti user (walaupun tidak ada pada method, tapi potensial dikemudian hari)
+    - Aturan akses tidak di berlakukan hampir diseluruh method yang membutuhkan hak akses seperti (create, put, patch, delete)
+
+
+PERBAIKAN:
+1. tambahkan method untuk digunakan ulang disetiap method yang membutuhkan pengecekan role
+    function checkCase(caseId){
+        const caseObj = db.prepare("SELECT * FROM cases WHERE id = ?").get(caseId);
+    
+        if (!caseObj) return false;
+    }
+
+    function checkRole(user, caseId, action) {
+        
+        if (checkCase(caseId)){
+            if (user.role === "admin") return true;
+
+            if (user.role === "moderator") {
+                return ["assign", "view"].includes(action || "");
+            }
+
+            if (user.role === "regular" || user.role === "user") {
+                const isOwner = caseObj && caseObj.created_by === user.id;
+                if (!isOwner) return false;
+                return ["see", "edit", "view"].includes(action || "");
+            }
+        }
+
+        // 4. Default: denied
+        return false;
+    }
+
+    tambahkan pengecekan pada setiap conditional misalnya:
+    untuk penghapusan data oleh admin:
+    contoh penggunaan:
+    if (checkRole(user.role, mCase[1], "delete" )){
+        //lakukan code selanjutnya
+    }
+
+    lain2nya: checkRole(user.role, mCase[1], "view")
+
+
+2. pada deletion data dibutuhkan improvements:
+    if (checkCase(caseId)){
+        if (checkRole(user.role, mCase[1], "delete" )){
+            //lalu pada saat deletion:
+            const result = db.prepare("DELETE FROM cases WHERE id = ?").run(caseId);
+            if (result.changes > 0 ){
+                return true //atau print message berhasil
+            } else {
+                return false // atau print message failed
+            }
+        } else {
+            return false // error karena hak akses harus admin
+        }
+    } else {
+        return false // atau print message failed does not exist datanya
+    }
+
+3. perubahan data cases 
+    beri validasi input atau disesuaikan dengan fields, 
+    
+    const caseId = req.params.id;
+    
+    const availableFields = ["title","description","status", "priority","requested_by","created_by","assigned_to","updated_at","case_number"];
+    
+    const incomingFields = Object.keys(req.body);
+    const validFields = incomingFields.filter(f => availableFields.includes(f));
+    
+    if (validFields.length === 0) {
+        return res.status(400).json({ error: 'No valid fields to update' });
+    }
+    
+    const sets = validFields.map(f => `${f}=?`).join(', ');
+    const values = validFields.map(f => req.body[f]);
+    
+    const sql = `UPDATE cases SET ${sets} WHERE id = ?`;
+    const finalParams = [...values, caseId];
+    
+    try {
+        const result = db.prepare(sql).run(...finalParams);
+        res.json({
+            success: true,
+            message: 'Case updated',
+            updatedFields: validFields,
+            changes: result.changes
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+
+
+4. assignment kasus oleh moderator
+    gunakan kombinasi method yang sudah digenerate diatas sehingga:
+    if (checkCase(caseId)){
+        if (checkRole(user.role, mCase[1], "assign")){
+            sedikit perubahan karena ada kesalahan kode pada soal
+            if (req.body.assigned_to){
+                const result = db.prepare("UPDATE cases SET assigned_to = ? updated_at = datetime('now') WHERE id = ?").run(req.body.assigneed_to, mCase[1]);
+                if (result.changes > 0){
+                    return true //message success
+                } else {
+                    return false // message error
+                }
+            } else {
+                return false // error tidak ada asignee
+            }
+        } else {
+            return false //error message karena not allowed/bukan moderator
+        }
+    }else {
+        return false //error
+    }
+
