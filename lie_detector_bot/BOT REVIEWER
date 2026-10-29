@@ -1,0 +1,13 @@
+1. Jawaban salah adalah jawaban yang melebihi nilai treshold yang disesuaikan dengan dokumen-dokumen kebijakan IT, tentu saja levelnya bisa diberikan level kebohongan sesuai dengan jauh tidaknya hasil 
+pengecekan oleh bot secara otomatis setiap harinya.
+2. simple aplikasi bot pengecekan sudah dibuat di folder lie_detector_bot
+3. training + fine tuning hingga akurasi > 90%
+4. laporan halucination:
+
+SARAN:
+- Tambahkan data kebijakan, shipping, jam, lokasi, discount atau macam sebagainya sehingga bot dapat mempelajari hal itu dan tidak mengarang
+- Tinggikan treshold 0.25 - 0.3 
+- Tambahkan fallback yang baik untuk menangani kasus yang tidak didapat jawaban dari policy yang tersedia
+- Training ulang bot berdasarkan jawaban yang diinginkan/espektasikan
+- update data kebijakan secara berkala + training terhadap update kebijakan pada bot
+- Evaluasi dari hasil analysa kebohongan yang dilakukan agar lebih align dengan jawaban yang diespektasikan.
